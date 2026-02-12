@@ -2,43 +2,45 @@ import csv
 
 from ping3 import ping
 
-domens = ['youtube.com',"web.telegram.org","profi.ru","vk.com","sky.pro","drive.google.com","mail.google.com","yandex.ru","kwork.ru","baserow.io"]
+
+domains = ['youtube.com',"web.telegram.org","profi.ru","vk.com","sky.pro","drive.google.com","mail.google.com","yandex.ru","kwork.ru","baserow.io"]
 RTT={}
 RTT_par={}
 RTT_max_par={}
 RTT_min_par={}
 lost={}
 results=[]
-for domen in domens:
+for domain in domains:
     rtt_list =[]
-    for j in range(4):
-      a = ping(domen, timeout=2)
-      if a != None:
-        rtt_list.append(a)
-    RTT[domen] = rtt_list
-    if RTT[domen]:
-      RTT_par[domen] = sum(RTT[domen]) / len(RTT[domen])
+    for _ in range(4):
+      rtt = ping(domain, timeout=2)
+      if rtt != None:
+        rtt_list.append(rtt)
+    RTT[domain] = rtt_list
+    if RTT[domain]:
+      RTT_par[domain] = sum(RTT[domain]) / len(RTT[domain])
     else:
-      RTT_par[domen] = None
-    lost[domen]= 100*((4- len(RTT[domen]))/4)
-    if RTT[domen]:
-      RTT_max_par[domen] = max(RTT[domen])
+      RTT_par[domain] = None
+    lost[domain]= 100*((4- len(RTT[domain]))/4)
+    if RTT[domain]:
+      RTT_max_par[domain] = max(RTT[domain])
     else:
-      RTT_max_par[domen] = None
-    if RTT[domen]:
-      RTT_min_par[domen] = min(RTT[domen])
+      RTT_max_par[domain] = None
+    if RTT[domain]:
+      RTT_min_par[domain] = min(RTT[domain])
     else:
-      RTT_min_par[domen] = None
+      RTT_min_par[domain] = None
     results.append({
-      'domain': domen,
-      'avg_rtt_sec': RTT_par[domen],
-      'max_rtt_sec': RTT_max_par[domen],
-      'loss_pct': lost[domen],
-      'min_rtt_sec': RTT_min_par[domen]
+      'domain': domain,
+      'avg_rtt_sec': RTT_par[domain],
+      'max_rtt_sec': RTT_max_par[domain],
+      'loss_pct': lost[domain],
+      'min_rtt_sec': RTT_min_par[domain]
     })
-filednames=['domain','avg_rtt_sec','max_rtt_sec','loss_pct','min_rtt_sec']
-with open("spisok.csv","w") as spis:
-  writer = csv.DictWriter(spis,fieldnames=filednames)
+    
+fieldnames=['domain','avg_rtt_sec','max_rtt_sec','loss_pct','min_rtt_sec']
+with open("list.csv","w") as info:
+  writer = csv.DictWriter(info,fieldnames=fieldnames)
   writer.writeheader()
   writer.writerows(results)
 

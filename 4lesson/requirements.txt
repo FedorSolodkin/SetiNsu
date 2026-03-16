@@ -1,0 +1,17 @@
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Parsing
+requests==2.31.0          # Оставляем на всякий случай
+beautifulsoup4==4.12.3    # Оставляем на всякий случай
+
+# Selenium (НОВОЕ!)
+selenium==4.17.2
+webdriver-manager==4.0.1
+
+# Environment variables
+python-dotenv==1.0.0

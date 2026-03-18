@@ -9,6 +9,7 @@ from typing import Dict, List
 from dotenv import load_dotenv
 import os
 
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -101,10 +102,7 @@ def _login(driver):
 # ============================================================================
 
 def parse_quotes(url: str) -> Dict:
-    """
-    Парсит страницу и возвращает первую цитату.
-    Добавлена защита от None значений.
-    """
+    """Парсит страницу и возвращает первую цитату с максимальной защитой."""
     global _is_logged_in
     
     driver = _get_driver()
@@ -114,7 +112,7 @@ def parse_quotes(url: str) -> Dict:
     
     try:
         driver.get(url)
-        time.sleep(2)  # Ждём загрузки
+        time.sleep(2)
         
         quotes = driver.find_elements(By.CLASS_NAME, "quote")
         if not quotes:
@@ -122,47 +120,61 @@ def parse_quotes(url: str) -> Dict:
         
         quote_element = quotes[0]
         
-        # === Безопасное извлечение данных ===
+        # === Безопасные хелперы для извлечения ===
         
-        # Цитата
-        text_elem = quote_element.find_element(By.CLASS_NAME, "text")
-        text = text_elem.text.strip() if text_elem else ""
+        def safe_text(parent, by, value):
+            """Возвращает текст элемента или пустую строку."""
+            try:
+                elem = parent.find_element(by, value)
+                return str(elem.text).strip() if elem and elem.text else ""
+            except (NoSuchElementException, Exception):
+                return ""
         
-        # Автор
-        author_elem = quote_element.find_element(By.CLASS_NAME, "author")
-        author = author_elem.text.strip() if author_elem else ""
+        def safe_attr(parent, css_selector, attr_name):
+            """Возвращает атрибут элемента или пустую строку."""
+            try:
+                elem = parent.find_element(By.CSS_SELECTOR, css_selector)
+                val = elem.get_attribute(attr_name) if elem else None
+                return str(val).strip() if val else ""
+            except (NoSuchElementException, Exception):
+                return ""
         
-        # Теги (безопасный .join)
-        tag_elems = quote_element.find_elements(By.CLASS_NAME, "tag")
-        tags_list = [tag.text.strip() for tag in tag_elems if tag and tag.text]
-        tags = ", ".join(tags_list) if tags_list else ""
+        def safe_tags_list(parent, class_name):
+            """Возвращает строку тегов через запятую."""
+            try:
+                elems = parent.find_elements(By.CLASS_NAME, class_name)
+                texts = [str(e.text).strip() for e in elems if e and e.text]
+                return ", ".join([t for t in texts if t])
+            except Exception:
+                return ""
         
-        # Ссылка автора (защита от None)
-        try:
-            link_elem = quote_element.find_element(By.CSS_SELECTOR, "a[href*='/author/']")
-            author_link = link_elem.get_attribute("href") if link_elem else ""
-        except:
-            author_link = ""
+        # === Извлекаем данные ===
+        text = safe_text(quote_element, By.CLASS_NAME, "text")
+        author = safe_text(quote_element, By.CLASS_NAME, "author")
+        tags = safe_tags_list(quote_element, "tag")
+        author_link = safe_attr(quote_element, "a[href*='/author/']", "href")
         
-        # === Формируем результат (все поля — строки, не None!) ===
+        # === Финальная гарантия: НИЧЕГО не может быть None ===
         result = {
-            "quote": text or "",
-            "author": author or "",
-            "tags": tags or "",
-            "author_link": author_link or ""
+            "quote": text if text else "",
+            "author": author if author else "",
+            "tags": tags if tags else "",
+            "author_link": author_link if author_link else ""
         }
         
-        # Проверка что все значения — строки (для защиты от .split() ошибок)
-        for key, value in result.items():
-            if value is None:
+        # Дополнительная страховка (на всякий случай)
+        for key in result:
+            if result[key] is None:
                 result[key] = ""
-            elif not isinstance(value, str):
-                result[key] = str(value)
+            elif not isinstance(result[key], str):
+                result[key] = str(result[key])
         
         return result
         
     except Exception as e:
-        print(f"❌ Ошибка парсинга: {e}")
+        import traceback
+        print(f"❌ Ошибка парсинга: {type(e).__name__}: {e}")
+        traceback.print_exc()  # ← теперь будет видно в docker logs!
         raise RuntimeError(f"Ошибка парсинга: {str(e)}")
 
 # ============================================================================
@@ -177,7 +189,7 @@ def _save_all_to_db(data_list: List[Dict]):
     
     try:
         conn = psycopg2.connect(
-            host=os.getenv("DB_HOST", "quotes-db"),
+            host=os.getenv("DB_HOST", "quotes-dbb"),
             port=os.getenv("DB_PORT", "5432"),
             database=os.getenv("DB_NAME", "postgres"),
             user=os.getenv("DB_USER", "postgres"),

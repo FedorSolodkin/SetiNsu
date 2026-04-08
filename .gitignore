@@ -1,0 +1,28 @@
+```
+# Data files
+*.csv
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Dependencies
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+```

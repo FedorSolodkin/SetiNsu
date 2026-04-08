@@ -4,15 +4,18 @@ dns_traceroute.py - Скрипт для выполнения DNS-запросо�
 с сохранением результатов в CSV-файл.
 
 Использование:
-    python3 dns_traceroute.py
-    python3 dns_traceroute.py --domains example.com,test.com
-    python3 dns_traceroute.py --output custom_results.csv
+    python dns_traceroute.py
+    python dns_traceroute.py --domains example.com,test.com
+    python dns_traceroute.py --output custom_results.csv
+    
+Поддерживается на Windows 10, Linux и macOS.
 """
 
 import subprocess
 import socket
 import csv
 import argparse
+import sys
 from datetime import datetime
 from typing import List, Tuple, Optional
 
@@ -41,7 +44,7 @@ def get_ip_addresses(domain: str) -> List[str]:
 
 def run_traceroute(ip_address: str, max_hops: int = 30, timeout: int = 5) -> List[str]:
     """
-    Выполнить traceroute для IP-адреса.
+    Выполнить traceroute для IP-адреса (кроссплатформенная версия).
     
     Args:
         ip_address: Целевой IP-адрес
@@ -53,23 +56,30 @@ def run_traceroute(ip_address: str, max_hops: int = 30, timeout: int = 5) -> Lis
     """
     hops = []
     
-    # Определяем доступную утилиту
-    traceroute_cmd = None
-    if subprocess.run(['which', 'traceroute'], capture_output=True).returncode == 0:
-        traceroute_cmd = ['traceroute', '-n', '-m', str(max_hops), '-w', str(timeout)]
-    elif subprocess.run(['which', 'tracepath'], capture_output=True).returncode == 0:
-        traceroute_cmd = ['tracepath', '-n', '-m', str(max_hops)]
+    # Определяем ОС и доступную утилиту
+    is_windows = sys.platform.startswith('win')
+    
+    if is_windows:
+        # Windows: используем tracert
+        print(f"  🪟  Обнаружена Windows, используем tracert")
+        traceroute_cmd = ['tracert', '-d', '-h', str(max_hops), '-w', str(timeout * 1000)]
     else:
-        # Пробуем использовать ping как fallback (не настоящий traceroute)
-        print(f"⚠️  Traceroute/tracepath не найдены, используем альтернативный метод")
-        return [f"no_traceroute_available_{ip_address}"]
+        # Linux/macOS: пробуем traceroute или tracepath
+        if subprocess.run(['which', 'traceroute'], capture_output=True).returncode == 0:
+            traceroute_cmd = ['traceroute', '-n', '-m', str(max_hops), '-w', str(timeout)]
+        elif subprocess.run(['which', 'tracepath'], capture_output=True).returncode == 0:
+            traceroute_cmd = ['tracepath', '-n', '-m', str(max_hops)]
+        else:
+            print(f"⚠️  Traceroute/tracepath не найдены")
+            return ['no_traceroute_available']
     
     try:
         result = subprocess.run(
             traceroute_cmd + [ip_address],
             capture_output=True,
             text=True,
-            timeout=max_hops * timeout + 10
+            timeout=max_hops * timeout + 10,
+            shell=is_windows  # Для Windows может потребоваться shell=True
         )
         
         output = result.stdout + result.stderr
@@ -77,23 +87,30 @@ def run_traceroute(ip_address: str, max_hops: int = 30, timeout: int = 5) -> Lis
         
         for line in lines:
             # Пропускаем заголовок и пустые строки
-            if not line or line.startswith('traceroute') or line.startswith('tracepath'):
+            if not line or line.startswith('Tracing route') or line.startswith('traceroute') or line.startswith('tracepath'):
                 continue
             
-            # Извлекаем IP из строки traceroute
+            # Извлекаем IP из строки traceroute/tracert
             parts = line.split()
             for part in parts:
                 # Ищем IP-адреса (простая проверка)
                 if '.' in part and ':' not in part:
-                    potential_ip = part.rstrip('*')
+                    potential_ip = part.rstrip('*').rstrip('ms').rstrip('<')
+                    # Очищаем от лишних символов
+                    potential_ip = potential_ip.strip('[]')
                     if potential_ip.count('.') == 3:
-                        hops.append(potential_ip)
-                        break
+                        # Проверяем, что это действительно IP-адрес
+                        ip_parts = potential_ip.split('.')
+                        if all(p.isdigit() and 0 <= int(p) <= 255 for p in ip_parts if p):
+                            hops.append(potential_ip)
+                            break
         
         return hops if hops else ['no_response']
         
     except subprocess.TimeoutExpired:
         return ['timeout']
+    except FileNotFoundError as e:
+        return [f'command_not_found: {str(e)}']
     except Exception as e:
         return [f'error: {str(e)}']
 
